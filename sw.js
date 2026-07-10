@@ -1,4 +1,4 @@
-var CACHE_NAME = "gym-tracker-v1";
+var CACHE_NAME = "gym-tracker-v2";
 var ASSETS = [
   "./",
   "./index.html",
@@ -27,16 +27,18 @@ self.addEventListener("activate", function (event) {
   self.clients.claim();
 });
 
+// Network-first: always try to fetch the latest deployed files first, so a
+// new push shows up on next load without needing a cache-version bump. Only
+// fall back to the cache when there's no network (offline use).
 self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
   event.respondWith(
-    caches.match(event.request).then(function (cached) {
-      if (cached) return cached;
-      return fetch(event.request).then(function (resp) {
-        var copy = resp.clone();
-        caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, copy); });
-        return resp;
-      }).catch(function () { return cached; });
+    fetch(event.request).then(function (resp) {
+      var copy = resp.clone();
+      caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, copy); });
+      return resp;
+    }).catch(function () {
+      return caches.match(event.request);
     })
   );
 });
