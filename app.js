@@ -378,11 +378,24 @@
     );
   }
 
+  var REC_ICON_BY_TONE = { good: "&#9650;", caution: "&#9888;", neutral: "&#8226;" };
+  var REC_LABEL_BY_TONE = { good: "Trending up", caution: "Heads up", neutral: "Recommendation" };
+
+  // Compact, tappable version of the recommendation card for the log screen —
+  // a glance-able nudge while you're actually keying in weights.
+  function renderCompactRec(routineId, exercise) {
+    var rec = buildRecommendation(routineId, exercise);
+    return (
+      '<button class="log-rec tone-' + rec.tone + '" data-action="open-progress-exercise" data-routine="' + routineId + '" data-exercise="' + esc(exercise) + '">' +
+        '<span class="log-rec-icon">' + REC_ICON_BY_TONE[rec.tone] + "</span>" +
+        '<span>' + esc(rec.text) + "</span>" +
+      "</button>"
+    );
+  }
+
   function viewProgressExercise(routineId, exercise) {
     var pts = exerciseHistoryPoints(routineId, exercise);
     var rec = buildRecommendation(routineId, exercise);
-    var iconByTone = { good: "&#9650;", caution: "&#9888;", neutral: "&#8226;" };
-    var labelByTone = { good: "Trending up", caution: "Heads up", neutral: "Recommendation" };
 
     var chart = renderLineChart(pts, isInverse(exercise));
     var chartBlock = chart
@@ -400,8 +413,8 @@
         "<h1>" + esc(exercise) + "</h1><span></span>" +
       "</div>" +
       '<div class="recommendation-card tone-' + rec.tone + '">' +
-        '<span class="rec-icon">' + iconByTone[rec.tone] + "</span>" +
-        '<span><span class="rec-label">' + labelByTone[rec.tone] + "</span>" + esc(rec.text) + "</span>" +
+        '<span class="rec-icon">' + REC_ICON_BY_TONE[rec.tone] + "</span>" +
+        '<span><span class="rec-label">' + REC_LABEL_BY_TONE[rec.tone] + "</span>" + esc(rec.text) + "</span>" +
       "</div>" +
       chartBlock +
       '<div class="section-title">Recent sessions</div>' +
@@ -440,6 +453,7 @@
         '<div class="exercise-block" data-exercise="' + esc(ex) + '">' +
           '<div class="field-row"><label>' + esc(ex) + "</label>" +
             '<span class="last-value">' + esc(hint) + "</span></div>" +
+          renderCompactRec(routineId, ex) +
           '<div class="sets-grid">' + boxes + "</div>" +
           '<input type="text" class="exercise-note" placeholder="' + esc(notePlaceholder) + '" value="' + esc(noteVal) + '">' +
         "</div>"

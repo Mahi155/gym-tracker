@@ -166,6 +166,37 @@ button, input, textarea {
   margin-bottom: 10px;
 }
 
+.log-rec {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface-2);
+  border: none;
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.log-rec.tone-good {
+  border-left-color: var(--accent);
+}
+
+.log-rec.tone-caution {
+  border-left-color: var(--warning);
+}
+
+.log-rec-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
 .exercise-block .exercise-note {
   width: 100%;
   background: var(--surface-2);
