@@ -165,13 +165,14 @@ button, input, textarea {
   margin-bottom: 10px;
 }
 
-.exercise-block input[type="text"] {
+.exercise-block .exercise-note {
   width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 16px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  color: var(--text-dim);
 }
 
 .exercise-block .remove-x {
@@ -181,6 +182,61 @@ button, input, textarea {
   font-size: 14px;
   cursor: pointer;
   padding: 4px;
+}
+
+.sets-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.set-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.set-box input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: center;
+  padding: 4px 2px;
+  min-width: 0;
+}
+
+.set-box .set-weight {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.set-box .set-reps {
+  font-size: 12px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.set-box input::-webkit-outer-spin-button,
+.set-box input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.set-box input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.history-item .entry-note {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  padding: 0 0 4px;
+  font-style: italic;
 }
 
 .date-field {

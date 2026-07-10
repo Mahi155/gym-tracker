@@ -62,13 +62,22 @@
     return list.length ? list[0] : null;
   }
 
-  function lastTextFor(routineId, exercise) {
+  function lastEntryFor(routineId, exercise) {
     var list = sessionsFor(routineId);
     for (var i = 0; i < list.length; i++) {
       var entry = list[i].entries.find(function (e) { return e.exercise === exercise; });
-      if (entry) return { text: entry.text, date: list[i].date };
+      if (entry) return { sets: entry.sets || [], note: entry.note || "", date: list[i].date };
     }
     return null;
+  }
+
+  var MAX_SETS = 4;
+
+  function fmtSets(sets) {
+    if (!sets || !sets.length) return "—";
+    return sets.map(function (s) {
+      return s.reps != null ? s.weight + "×" + s.reps : String(s.weight);
+    }).join("   ");
   }
 
   function toast(msg) {
@@ -129,14 +138,30 @@
 
     var rows = routine.exercises.map(function (ex) {
       var prefillEntry = existingToday && existingToday.entries.find(function (e) { return e.exercise === ex; });
-      var last = lastTextFor(routineId, ex);
-      var prefillText = prefillEntry ? prefillEntry.text : (last ? last.text : "");
+      var last = lastEntryFor(routineId, ex);
+      var sourceSets = prefillEntry ? prefillEntry.sets : (last ? last.sets : []);
+      var noteVal = prefillEntry ? (prefillEntry.note || "") : "";
+      var notePlaceholder = last && last.note ? last.note : "note (optional)";
       var hint = last ? "last " + fmtDate(last.date) : "not logged before";
+
+      var boxes = "";
+      for (var i = 0; i < MAX_SETS; i++) {
+        var s = sourceSets && sourceSets[i];
+        var w = s && s.weight != null ? s.weight : "";
+        var r = s && s.reps != null ? s.reps : "";
+        boxes +=
+          '<div class="set-box">' +
+            '<input type="number" step="0.5" inputmode="decimal" class="set-weight" placeholder="lbs" data-set="' + i + '" value="' + esc(w) + '">' +
+            '<input type="number" step="1" inputmode="numeric" class="set-reps" placeholder="reps" data-set="' + i + '" value="' + esc(r) + '">' +
+          "</div>";
+      }
+
       return (
         '<div class="exercise-block" data-exercise="' + esc(ex) + '">' +
           '<div class="field-row"><label>' + esc(ex) + "</label>" +
             '<span class="last-value">' + esc(hint) + "</span></div>" +
-          '<input type="text" inputmode="text" data-role="exercise-input" value="' + esc(prefillText) + '">' +
+          '<div class="sets-grid">' + boxes + "</div>" +
+          '<input type="text" class="exercise-note" placeholder="' + esc(notePlaceholder) + '" value="' + esc(noteVal) + '">' +
         "</div>"
       );
     }).join("");
@@ -169,7 +194,10 @@
     var list = sessionsFor(routineId);
     var items = list.map(function (s) {
       var rows = s.entries.map(function (e) {
-        return '<div class="row"><span class="ex">' + esc(e.exercise) + '</span><span class="val">' + esc(e.text) + "</span></div>";
+        return (
+          '<div class="row"><span class="ex">' + esc(e.exercise) + '</span><span class="val">' + esc(fmtSets(e.sets)) + "</span></div>" +
+          (e.note ? '<div class="entry-note">' + esc(e.note) + "</div>" : "")
+        );
       }).join("");
       return (
         '<div class="history-item">' +
@@ -285,9 +313,18 @@
     var entries = [];
     blocks.forEach(function (block) {
       var exName = block.getAttribute("data-exercise");
-      var input = block.querySelector('[data-role="exercise-input"]');
-      var text = input.value.trim();
-      if (text) entries.push({ exercise: exName, text: text });
+      var sets = [];
+      block.querySelectorAll(".set-box").forEach(function (box) {
+        var wVal = box.querySelector(".set-weight").value;
+        var rVal = box.querySelector(".set-reps").value;
+        if (wVal !== "") sets.push({ weight: parseFloat(wVal), reps: rVal !== "" ? parseInt(rVal, 10) : null });
+      });
+      var note = block.querySelector(".exercise-note").value.trim();
+      if (sets.length || note) {
+        var entry = { exercise: exName, sets: sets };
+        if (note) entry.note = note;
+        entries.push(entry);
+      }
     });
     var note = document.getElementById("session-note").value.trim();
 
@@ -383,7 +420,7 @@
   function clearData() {
     if (!confirm("This deletes every workout and weight entry on this device. Continue?")) return;
     if (!confirm("Are you sure? This cannot be undone.")) return;
-    data = { version: 1, routines: JSON.parse(JSON.stringify(SEED_DATA.routines)), bodyWeight: [], sessions: [] };
+    data = { version: 2, routines: JSON.parse(JSON.stringify(SEED_DATA.routines)), bodyWeight: [], sessions: [] };
     save();
     toast("All data cleared");
     go("home");

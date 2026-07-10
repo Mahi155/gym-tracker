@@ -11,9 +11,11 @@ are there from the first launch.
 
 - Home screen shows Pull / Push / Leg / Body weight, each with "last logged"
   info.
-- Tapping a routine opens a log screen where every exercise is **pre-filled
-  with what you entered last time** — you only edit the numbers that changed,
-  then tap Save.
+- Tapping a routine opens a log screen where every exercise has 4 set boxes
+  (weight + reps each), **pre-filled from what you logged last time** — you
+  only edit the numbers that changed, then tap Save. Extra boxes and an
+  optional note field are there for the days you do more sets or want to jot
+  something down.
 - Logging again on the same day updates that day's entry instead of creating
   a duplicate.
 - Add an exercise inline any time; it's remembered in that routine going
