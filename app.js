@@ -99,11 +99,19 @@
 
   var MAX_SETS = 4;
 
-  function fmtSets(sets) {
-    if (!sets || !sets.length) return "—";
-    return sets.map(function (s) {
-      return s.reps != null ? s.weight + "×" + s.reps : String(s.weight);
-    }).join("   ");
+  // Renders sets read-only, using the same set-box grid look as the log
+  // screen's input boxes, so history matches how you enter a workout.
+  function renderSetsGrid(sets) {
+    if (!sets || !sets.length) return "";
+    var boxes = sets.map(function (s) {
+      return (
+        '<div class="set-box">' +
+          '<div class="set-weight">' + esc(s.weight) + "</div>" +
+          '<div class="set-reps">' + (s.reps != null ? esc(s.reps) + " reps" : "&mdash;") + "</div>" +
+        "</div>"
+      );
+    }).join("");
+    return '<div class="sets-grid history-sets-grid">' + boxes + "</div>";
   }
 
   function toast(msg) {
@@ -221,8 +229,11 @@
     var items = list.map(function (s) {
       var rows = s.entries.map(function (e) {
         return (
-          '<div class="row"><span class="ex">' + esc(e.exercise) + '</span><span class="val">' + esc(fmtSets(e.sets)) + "</span></div>" +
-          (e.note ? '<div class="entry-note">' + esc(e.note) + "</div>" : "")
+          '<div class="history-exercise">' +
+            '<div class="ex-name">' + esc(e.exercise) + "</div>" +
+            renderSetsGrid(e.sets) +
+            (e.note ? '<div class="entry-note">' + esc(e.note) + "</div>" : "") +
+          "</div>"
         );
       }).join("");
       return (

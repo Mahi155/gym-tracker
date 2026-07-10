@@ -201,13 +201,15 @@ button, input, textarea {
   gap: 3px;
 }
 
-.set-box input {
+.set-box input,
+.set-box > div {
   width: 100%;
   background: transparent;
   border: none;
   text-align: center;
   padding: 4px 2px;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .set-box .set-weight {
@@ -343,26 +345,32 @@ button, input, textarea {
   font-style: italic;
 }
 
-.history-item .row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 14px;
-  padding: 3px 0;
+.history-exercise {
+  padding: 10px 0;
   border-top: 1px solid var(--border);
 }
 
-.history-item .row:first-of-type {
+.history-exercise:first-of-type {
   border-top: none;
+  padding-top: 0;
 }
 
-.history-item .row .ex {
+.history-exercise .ex-name {
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--text-dim);
-  flex-shrink: 0;
+  margin-bottom: 6px;
 }
 
-.history-item .row .val {
-  text-align: right;
+.history-sets-grid {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.history-sets-grid .set-box {
+  flex: 1;
+  background: var(--surface-2);
 }
 
 /* ---------- Body weight ---------- */
