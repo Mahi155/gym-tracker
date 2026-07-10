@@ -114,6 +114,148 @@
     return '<div class="sets-grid history-sets-grid">' + boxes + "</div>";
   }
 
+  // ---------------- Analytics ----------------
+
+  var ROUTINE_IDS = ["pull", "push", "leg"];
+
+  // Exercises where a LOWER number is the harder/better direction — assisted-machine
+  // moves where the weight is how much help you're getting, not how much you're lifting.
+  var INVERSE_EXERCISES = ["Pullup"];
+  function isInverse(exercise) { return INVERSE_EXERCISES.indexOf(exercise) !== -1; }
+
+  // The "top set" is whichever set was hardest that session; reps break ties.
+  function topSet(sets, inverse) {
+    if (!sets || !sets.length) return null;
+    return sets.reduce(function (best, s) {
+      if (!best) return s;
+      var harder = inverse ? s.weight < best.weight : s.weight > best.weight;
+      if (harder) return s;
+      if (s.weight === best.weight && (s.reps || 0) > (best.reps || 0)) return s;
+      return best;
+    }, null);
+  }
+
+  // Ascending-by-date series of top-set weight/reps for one exercise, one point per session it appears in.
+  function exerciseHistoryPoints(routineId, exercise) {
+    var inverse = isInverse(exercise);
+    var sessions = sessionsFor(routineId).slice().sort(function (a, b) { return a.date.localeCompare(b.date); });
+    var points = [];
+    sessions.forEach(function (s) {
+      var entry = s.entries.find(function (e) { return e.exercise === exercise; });
+      if (!entry) return;
+      var top = topSet(entry.sets, inverse);
+      if (!top) return;
+      points.push({ date: s.date, weight: top.weight, reps: top.reps });
+    });
+    return points;
+  }
+
+  // Best-ever effort logged, per exercise, across every routine — for the personal-records list.
+  function allTimeRecords() {
+    var records = {};
+    data.sessions.forEach(function (s) {
+      s.entries.forEach(function (e) {
+        var inverse = isInverse(e.exercise);
+        var top = topSet(e.sets, inverse);
+        if (!top) return;
+        var key = s.routineId + "|" + e.exercise;
+        var better = !records[key] || (inverse ? top.weight < records[key].weight : top.weight > records[key].weight);
+        if (better) {
+          records[key] = { routineId: s.routineId, exercise: e.exercise, weight: top.weight, reps: top.reps, date: s.date };
+        }
+      });
+    });
+    return Object.keys(records).map(function (k) { return records[k]; });
+  }
+
+  // Simple, transparent progressive-overload heuristic — always shows its reasoning
+  // rather than a black-box verdict. Not medical or coaching advice, just a nudge.
+  // Direction-aware: "progressed" means harder, regardless of whether that's a higher
+  // or lower number for this particular exercise (see INVERSE_EXERCISES).
+  function buildRecommendation(routineId, exercise) {
+    var pts = exerciseHistoryPoints(routineId, exercise);
+    if (!pts.length) return { tone: "neutral", text: "No sessions logged yet — recommendations show up after your first one." };
+
+    var inverse = isInverse(exercise);
+    var latest = pts[pts.length - 1];
+    var prev = pts.length > 1 ? pts[pts.length - 2] : null;
+    var sinceDays = Math.round((Date.now() - new Date(latest.date + "T00:00:00").getTime()) / 86400000);
+
+    if (sinceDays > 14) {
+      return { tone: "caution", text: "It's been " + sinceDays + " days since you trained this — ease back in around " + latest.weight + " before pushing for more." };
+    }
+    if (!prev) {
+      return { tone: "neutral", text: "One session logged (" + latest.weight + (latest.reps != null ? "×" + latest.reps : "") + ") — a couple more and you'll get a trend-based tip." };
+    }
+
+    var progressed = inverse ? latest.weight < prev.weight : latest.weight > prev.weight;
+    var regressed = inverse ? latest.weight > prev.weight : latest.weight < prev.weight;
+
+    if (progressed) {
+      if (latest.reps != null && latest.reps < 6) {
+        return { tone: "caution", text: "You made this harder last time (now " + latest.weight + ") and reps dropped to " + latest.reps + " — hold here until reps recover before pushing further." };
+      }
+      return { tone: "good", text: "Nice progress to " + latest.weight + " — stay there and build reps back up before the next step." };
+    }
+    if (regressed) {
+      return { tone: "neutral", text: "This eased back from " + prev.weight + " to " + latest.weight + " — fine after a hard session, worth a look if it keeps trending that way." };
+    }
+
+    // same weight as last time
+    if (latest.reps != null && prev.reps != null && latest.reps >= 10 && prev.reps >= 10) {
+      return { tone: "good", text: "You've held " + latest.weight + " for 10+ reps two sessions running — try making it a bit harder next time." };
+    }
+    var lastFew = pts.slice(-4);
+    var flatWeight = lastFew.every(function (p) { return p.weight === lastFew[0].weight; });
+    if (flatWeight && lastFew.length >= 3) {
+      return { tone: "caution", text: "This has been at " + latest.weight + " for " + lastFew.length + " sessions — try pushing it a bit harder, or aim for more reps, to break through." };
+    }
+    return { tone: "neutral", text: "Steady at " + latest.weight + " — keep working reps up before the next step." };
+  }
+
+  // 2px line, r>=4 markers with a 2px surface-color ring, endpoint + PR direct-labeled.
+  // Label anchor shifts near the edges so text never clips outside the viewBox.
+  function renderLineChart(points, inverse) {
+    if (points.length < 2) return "";
+    var w = 320, h = 130, padX = 26, padY = 22;
+    var weights = points.map(function (p) { return p.weight; });
+    var min = Math.min.apply(null, weights), max = Math.max.apply(null, weights);
+    var range = max - min || 1;
+    var xy = points.map(function (p, i) {
+      var x = padX + (i / (points.length - 1)) * (w - padX * 2);
+      var y = h - padY - ((p.weight - min) / range) * (h - padY * 2);
+      return { x: x, y: y, p: p };
+    });
+    var linePts = xy.map(function (c) { return c.x.toFixed(1) + "," + c.y.toFixed(1); }).join(" ");
+    var bestVal = inverse ? min : max;
+    var bestIdx = weights.indexOf(bestVal);
+    var lastIdx = xy.length - 1;
+
+    var dots = xy.map(function (c, i) {
+      return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="4" fill="#10b981" stroke="#0b0f14" stroke-width="2"><title>' +
+        esc(fmtDate(c.p.date)) + ": " + esc(c.p.weight) + (c.p.reps != null ? "×" + esc(c.p.reps) : "") + "</title></circle>";
+    }).join("");
+
+    function label(i, text, isAbove) {
+      var c = xy[i];
+      var ty = isAbove ? c.y - 10 : c.y + 16;
+      var anchor = "middle";
+      if (c.x < padX + 4) anchor = "start";
+      else if (c.x > w - padX - 4) anchor = "end";
+      return '<text x="' + c.x.toFixed(1) + '" y="' + ty.toFixed(1) + '" font-size="11" fill="#8b98a5" text-anchor="' + anchor + '">' + esc(text) + "</text>";
+    }
+
+    var labels = label(lastIdx, String(xy[lastIdx].p.weight), xy[lastIdx].y > h / 2);
+    if (bestIdx !== lastIdx) labels += label(bestIdx, "PR " + weights[bestIdx], xy[bestIdx].y > h / 2);
+
+    return (
+      '<svg class="trend exercise-trend" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none">' +
+        '<polyline points="' + linePts + '" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+        dots + labels +
+      "</svg>"
+    );
+  }
+
   function toast(msg) {
     var t = document.createElement("div");
     t.className = "toast";
@@ -157,9 +299,113 @@
         cards +
       "</div>" +
       '<div class="section">' +
+        '<button class="secondary-btn" data-action="open-progress">Progress &amp; recommendations</button>' +
         '<button class="secondary-btn" data-action="open-history-picker">View history</button>' +
       "</div>" +
       '<div class="settings-link" data-action="open-settings">Settings &amp; backup</div>'
+    );
+  }
+
+  function viewProgress() {
+    var totalSessions = data.sessions.length;
+    var monthPrefix = todayStr().slice(0, 7);
+    var thisMonth = data.sessions.filter(function (s) { return s.date.slice(0, 7) === monthPrefix; }).length;
+    var mostRecentDate = data.sessions.reduce(function (max, s) { return !max || s.date > max ? s.date : max; }, null);
+    var sinceLast = mostRecentDate ? daysAgo(mostRecentDate) : "no workouts yet";
+
+    var weightEntries = data.bodyWeight.slice().sort(function (a, b) { return a.date.localeCompare(b.date); });
+    var weightDelta = "";
+    if (weightEntries.length >= 2) {
+      var d = weightEntries[weightEntries.length - 1].value - weightEntries[0].value;
+      weightDelta = (d > 0 ? "+" : "") + d.toFixed(1) + " since first log";
+    }
+
+    var records = allTimeRecords();
+    var prGroups = ROUTINE_IDS.map(function (id) {
+      var rows = records
+        .filter(function (r) { return r.routineId === id; })
+        .sort(function (a, b) { return b.weight - a.weight; })
+        .map(function (r) {
+          return (
+            '<div class="pr-row">' +
+              '<span class="pr-name">' + esc(r.exercise) + (isInverse(r.exercise) ? ' <span class="pr-date">(least assist)</span>' : "") + "</span>" +
+              '<span class="pr-value">' + esc(r.weight) + (r.reps != null ? "&times;" + esc(r.reps) : "") +
+                '<span class="pr-date">' + esc(fmtDate(r.date)) + "</span></span>" +
+            "</div>"
+          );
+        }).join("");
+      if (!rows) return "";
+      return '<div class="pr-group-label">' + esc(data.routines[id].label) + "</div>" + rows;
+    }).join("");
+
+    var routineButtons = ROUTINE_IDS.map(function (id) {
+      return '<button class="routine-card" data-action="open-progress-routine" data-routine="' + id + '">' +
+        '<span class="label">' + esc(data.routines[id].label) + "</span></button>";
+    }).join("");
+
+    return (
+      '<div class="topbar"><button class="back-btn" data-action="home">&larr; Home</button><h1>Progress</h1><span></span></div>' +
+      '<div class="stat-grid">' +
+        '<div class="stat-tile"><div class="stat-label">Total workouts</div><div class="stat-value">' + totalSessions + "</div></div>" +
+        '<div class="stat-tile"><div class="stat-label">This month</div><div class="stat-value">' + thisMonth + "</div></div>" +
+        '<div class="stat-tile"><div class="stat-label">Last workout</div><div class="stat-value" style="font-size:16px">' + esc(sinceLast) + "</div></div>" +
+        '<div class="stat-tile"><div class="stat-label">Body weight change</div><div class="stat-value" style="font-size:16px">' + (esc(weightDelta) || "&mdash;") + "</div></div>" +
+      "</div>" +
+      '<div class="section-title">By exercise</div>' +
+      '<div class="home-grid" style="margin-bottom:18px">' + routineButtons + "</div>" +
+      '<div class="section-title">Personal records</div>' +
+      '<div class="pr-list">' + (prGroups || '<div class="empty">Log a few workouts to see records here.</div>') + "</div>"
+    );
+  }
+
+  function viewProgressRoutine(routineId) {
+    var routine = data.routines[routineId];
+    var buttons = routine.exercises.map(function (ex) {
+      var pts = exerciseHistoryPoints(routineId, ex);
+      var meta = pts.length ? pts.length + " session" + (pts.length === 1 ? "" : "s") + " logged" : "no data yet";
+      return (
+        '<button class="exercise-pick-btn" data-action="open-progress-exercise" data-routine="' + routineId + '" data-exercise="' + esc(ex) + '">' +
+          "<span>" + esc(ex) + "</span><span class=\"meta\">" + esc(meta) + "</span>" +
+        "</button>"
+      );
+    }).join("");
+    return (
+      '<div class="topbar">' +
+        '<button class="back-btn" data-action="open-progress">&larr; Back</button>' +
+        "<h1>" + esc(routine.label) + "</h1><span></span>" +
+      "</div>" +
+      buttons
+    );
+  }
+
+  function viewProgressExercise(routineId, exercise) {
+    var pts = exerciseHistoryPoints(routineId, exercise);
+    var rec = buildRecommendation(routineId, exercise);
+    var iconByTone = { good: "&#9650;", caution: "&#9888;", neutral: "&#8226;" };
+    var labelByTone = { good: "Trending up", caution: "Heads up", neutral: "Recommendation" };
+
+    var chart = renderLineChart(pts, isInverse(exercise));
+    var chartBlock = chart
+      ? '<div class="chart-wrap"><div class="chart-title">Top set weight over time</div>' + chart + "</div>"
+      : '<div class="empty">Log this exercise a couple more times to see a trend chart.</div>';
+
+    var recentRows = pts.slice(-6).reverse().map(function (p) {
+      return '<div class="pr-row"><span class="pr-name">' + esc(fmtDate(p.date)) + "</span><span class=\"pr-value\">" +
+        esc(p.weight) + (p.reps != null ? "&times;" + esc(p.reps) : "") + "</span></div>";
+    }).join("");
+
+    return (
+      '<div class="topbar">' +
+        '<button class="back-btn" data-action="open-progress-routine" data-routine="' + routineId + '">&larr; Back</button>' +
+        "<h1>" + esc(exercise) + "</h1><span></span>" +
+      "</div>" +
+      '<div class="recommendation-card tone-' + rec.tone + '">' +
+        '<span class="rec-icon">' + iconByTone[rec.tone] + "</span>" +
+        '<span><span class="rec-label">' + labelByTone[rec.tone] + "</span>" + esc(rec.text) + "</span>" +
+      "</div>" +
+      chartBlock +
+      '<div class="section-title">Recent sessions</div>' +
+      '<div class="pr-list">' + (recentRows || '<div class="empty">Nothing logged yet.</div>') + "</div>"
     );
   }
 
@@ -334,6 +580,9 @@
     else if (v.name === "log") html = viewLog(v.params.routine);
     else if (v.name === "routine-history") html = viewRoutineHistory(v.params.routine);
     else if (v.name === "history-picker") html = viewHistoryPicker();
+    else if (v.name === "progress") html = viewProgress();
+    else if (v.name === "progress-routine") html = viewProgressRoutine(v.params.routine);
+    else if (v.name === "progress-exercise") html = viewProgressExercise(v.params.routine, v.params.exercise);
     else if (v.name === "weight") html = viewWeight();
     else if (v.name === "settings") html = viewSettings();
     else html = viewHome();
@@ -469,11 +718,15 @@
     var action = el.getAttribute("data-action");
     var routine = el.getAttribute("data-routine");
     var id = el.getAttribute("data-id");
+    var exercise = el.getAttribute("data-exercise");
 
     if (action === "home") go("home");
     else if (action === "open-log") go("log", { routine: routine });
     else if (action === "open-routine-history") go("routine-history", { routine: routine });
     else if (action === "open-history-picker") go("history-picker");
+    else if (action === "open-progress") go("progress");
+    else if (action === "open-progress-routine") go("progress-routine", { routine: routine });
+    else if (action === "open-progress-exercise") go("progress-exercise", { routine: routine, exercise: exercise });
     else if (action === "open-weight") go("weight");
     else if (action === "open-settings") go("settings");
     else if (action === "save-session") saveSession(routine);
