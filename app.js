@@ -6,10 +6,36 @@
   var state = { view: { name: "home" } };
   var data = load();
 
+  // Upgrades data saved by an older version of this app (free-text entries)
+  // to the current structured {weight, reps} sets format, preserving the
+  // original text as a note instead of dropping it.
+  function migrate(d) {
+    var changed = false;
+    if (!d.version || d.version < 2) {
+      (d.sessions || []).forEach(function (s) {
+        (s.entries || []).forEach(function (e) {
+          if (!e.sets) {
+            e.sets = [];
+            if (e.text) e.note = e.note ? e.note + " | " + e.text : e.text;
+            delete e.text;
+            changed = true;
+          }
+        });
+      });
+      d.version = 2;
+      changed = true;
+    }
+    return changed;
+  }
+
   function load() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (migrate(parsed)) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        return parsed;
+      }
     } catch (e) { /* fall through to seed */ }
     var seeded = JSON.parse(JSON.stringify(SEED_DATA));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
