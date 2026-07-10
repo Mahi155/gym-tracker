@@ -485,7 +485,19 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function () { /* offline support is best-effort */ });
+      navigator.serviceWorker.register("sw.js").then(function (reg) {
+        // Force a fresh check every load instead of waiting on the browser's
+        // own update heuristics, which can lag for a long time on some
+        // mobile browsers (notably installed iOS home-screen apps).
+        reg.update().catch(function () {});
+      }).catch(function () { /* offline support is best-effort */ });
+    });
+    // If a new service worker takes over mid-session, reload once so the
+    // page picks up the new files instead of continuing to run stale code.
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (window.__gtReloaded) return;
+      window.__gtReloaded = true;
+      location.reload();
     });
   }
 })();
